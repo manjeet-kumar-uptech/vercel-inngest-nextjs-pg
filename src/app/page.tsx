@@ -1,103 +1,126 @@
-import Image from "next/image";
+"use client";
 
+import { useCallback, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { UploadCloud, FileSpreadsheet, CheckCircle2, XCircle } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { inngest } from "../inngest/client";
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const csv = acceptedFiles.find((f) => f.type === "text/csv" || f.name.toLowerCase().endsWith(".csv"));
+    setFile(csv ?? null);
+    setUploadedUrl(null);
+    setStatus("idle");
+    setError(null);
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
+    onDrop,
+    multiple: false,
+    accept: { "text/csv": [".csv"] },
+    maxFiles: 1,
+  });
+
+  async function handleUpload() {
+    if (!file) return;
+    setStatus("uploading");
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/blob/upload-url", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Failed to upload file");
+      const data = (await res.json()) as { url: string };
+      setUploadedUrl(data.url);
+      setStatus("success");
+
+      // send event to inngest
+      sendEventToInngest();
+
+    } catch (e) {
+      setError((e as Error).message);
+      setStatus("error");
+    }
+  }
+
+  async function sendEventToInngest() {
+    try {
+      const response = await fetch("/api/events/file-upload-event", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ user: "Okay" }),
+      });
+      console.log("Response from inngest", response);
+
+      
+    } catch {
+      console.log("Error sending event to inngest");
+    } finally {
+      console.log("Event sent to inngest");
+    }
+  }
+
+  return (
+    <div className="min-h-dvh w-full flex items-center justify-center p-6">
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>Upload CSV to Vercel Blob</CardTitle>
+          <CardDescription>Drag and drop a .csv file or click to select.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div
+            {...getRootProps()}
+            className={"border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors " +
+              (isDragActive ? "bg-black/5 dark:bg-white/5" : "hover:bg-black/5 dark:hover:bg-white/5")}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            <input {...getInputProps()} />
+            <UploadCloud className="mx-auto mb-3" />
+            <p className="font-medium">{isDragActive ? "Drop the file here..." : "Drag 'n' drop your CSV here, or click to select"}</p>
+            <p className="text-sm text-black/60 dark:text-white/60 mt-1">Only .csv files are accepted.</p>
+          </div>
+
+          {file && (
+            <div className="mt-4 flex items-center gap-3">
+              <FileSpreadsheet />
+              <div className="flex-1">
+                <p className="text-sm font-medium">{file.name}</p>
+                <p className="text-xs text-black/60 dark:text-white/60">{(file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <Button onClick={handleUpload} disabled={status === "uploading"}>
+                {status === "uploading" ? "Uploading..." : "Upload"}
+              </Button>
+            </div>
+          )}
+
+          {fileRejections.length > 0 && (
+            <p className="mt-3 text-sm text-red-600">Only one .csv file is allowed.</p>
+          )}
+
+          {status === "success" && uploadedUrl && (
+            <div className="mt-4 flex items-center gap-2 text-green-600">
+              <CheckCircle2 />
+              <a className="underline" href={uploadedUrl} target="_blank" rel="noreferrer">
+                View uploaded file
+              </a>
+            </div>
+          )}
+
+          {status === "error" && error && (
+            <div className="mt-4 flex items-center gap-2 text-red-600">
+              <XCircle />
+              <p>{error}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
